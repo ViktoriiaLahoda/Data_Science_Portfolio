@@ -1,0 +1,488 @@
+---
+title: "Ocena skuteczności technologii DoubleBulb i CoatItYourself w wydłużaniu czasu życia żarówek
+Wpływ zastosowanych innowacji na żywotność i opłacalność żarówek LaLuz"
+author: "Viktoriia Lahoda"
+date: "`r Sys.Date()`"
+output: html_document
+css: style.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wstęp
+
+Celem tego dokumentu jest analiza danych dotyczących czasu życia żarówek produkowanych przez firmę LaLuz. Producent wprowadził na rynek dwa innowacyjne rozwiązania technologiczne mające na celu zwiększenie trwałości żarówek: model o podwójnej szklanej bańce (*DoubleBulb*) oraz spray zwiększający szczelność żarówek (*CoatItYourself*). Oba rozwiązania zostały przetestowane w warunkach rzeczywistych w celu oceny ich skuteczności.
+
+W ramach analizy odpowiedziano na następujące pytania:
+
+1. Czy żarówki *DoubleBulb* mają dłuższy średni czas życia w porównaniu do żarówek standardowych?
+2. Czy stosowanie sprayu *CoatItYourself* wydłuża czas życia żarówek, niezależnie od ich typu?
+3. Czy korzystanie z tych innowacyjnych rozwiązań jest ekonomicznie uzasadnione?
+4. Jakie zmiany można zaproponować producentowi, aby poprawić użyteczność oraz opłacalność stosowania sprayu?
+
+Dane do analizy zostały dostarczone w formacie CSV i obejmują wyniki eksperymentu z 400 żarówkami, w którym testowano różne kombinacje typów żarówek oraz użycia sprayu. Dokument ten powstał w formacie RMarkdown i prezentuje wszystkie kroki analizy w sposób szczegółowy i transparentny, zgodnie z wymogami redakcji.
+
+Każdy etap analizy danych został przeprowadzony z użyciem języka R. Obejmuje to wczytanie danych, eksplorację, wizualizację oraz zastosowanie odpowiednich testów statystycznych, które umożliwiły wyciągnięcie wniosków. Na podstawie analizy przedstawiono rekomendacje zarówno dla konsumentów, jak i dla producenta żarówek.
+
+# Dane z badania
+
+400 żarówek, po 200 standardowych oraz *DoubleBulb*, zostało zakupionych przez nasz zespół. 100 żarówek każdego typu było użytkowanych normalnie, a pozostałe 100 pokryto sprayem *CoatItYourself*, przestrzegając zaleceń producenta dotyczących jego użytkowania. Dane zostały pobrane z [tej strony](https://mimuw.edu.pl/~szym/laluz.csv). W pliku jako separator użyto ";". Ponadto wszystkie dane tekstowe zostały wczytane jako faktory, co ułatwia ich grupowanie i filtrowanie.
+
+```{r}
+data <- read.csv("https://mimuw.edu.pl/~szym/laluz.csv", sep = ";", stringsAsFactors=TRUE)
+head(data)
+summary(data)
+```
+
+Przed przystąpieniem do analizy konieczne było przygotowanie danych. Po pierwsze, zapisałyśmy cenę sprayu *CoatItYourself* podaną w tabeli, a następnie usunęłyśmy wiersz z tymi danymi, aby nie zakłócał obliczeń. Następnie usunęłyśmy piątą kolumnę, która zawierała liczne brakujące dane i nie była potrzebna do analizy.
+
+```{r}
+#czyszczenie danych
+CoatItYourself_price <- data[401, "price_in_PLN"]
+data <- data[-401, ] 
+data <- data[ ,-5] 
+summary(data)
+```
+
+# Weryfikacja danych odstających
+
+Aby zweryfikować dane odstające, stworzyłyśmy wykres pudełkowy.
+
+```{r}
+old_colnames <- colnames(data)
+data[ , ncol(data) + 1] <- paste(data[["product_type"]], data[["sprayed"]])
+colnames(data) <- c(old_colnames, "product_type_sprayed")
+data[["product_type_sprayed"]] <- factor(data[["product_type_sprayed"]], levels = c("regular bulb none", "regular bulb CoatItYourself", "DoubleBulb none", "DoubleBulb CoatItYourself"))
+
+type_sprayed_list <- list()
+for (each in levels(data[["product_type_sprayed"]])) {
+  type_sprayed_list[[each]] <- data[data[, "product_type_sprayed"] == each, "time_in_hours"]
+}
+
+graphic_colors <- palette.colors(palette = "Okabe-Ito")[3:7]
+
+boxplot(type_sprayed_list, 
+        col = graphic_colors, 
+        cex.axis = 0.7,
+        main = "Zależność czasu od typu żarówek i użycia CoatItYourself")
+```
+
+Na wykresie widać pięć punktów odstających. Są to:
+- Dwie obserwacje dla zwykłej żarówki z *CoatItYourself*;
+- Jedna obserwacja dla *DoubleBulb* bez sprayu;
+- Dwie obserwacje dla *DoubleBulb* z *CoatItYourself*.
+
+Usunęłyśmy dwie najbardziej odstające wartości:
+- `time_in_hours = 9645.4` dla zwykłej żarówki z *CoatItYourself*;
+- `time_in_hours = 31869.6` dla *DoubleBulb* bez sprayu.
+
+Pozostałe rzekomo odstające obserwacje to `time_in_hours = 10199.5` i `time_in_hours = 9110.8` dla *DoubleBulb* z *CoatItYourself* oraz `time_in_hours = 1250.8` dla zwykłej żarówki z *CoatItYourself*. Zachowałyśmy te obserwacje , ponieważ nie odstawały za bardzo od obserwcji innych typów żarówek. Uważamy, że jest to reprezentatywne też dlatego, że zachowałyśmy zarówno dane odstające powyżej pozostałych jak i poniżej.
+
+```{r}
+data <- data[-296, ]
+data <- data[-288, ]
+summary(data)
+```
+
+Po przygotowaniu danych ponownie zweryfikowałyśmy wykres pudełkowy:
+
+```{r}
+type_sprayed_list <- list()
+for (each in levels(data[["product_type_sprayed"]])) {
+  type_sprayed_list[[each]] <- data[data[, "product_type_sprayed"] == each, "time_in_hours"]
+}
+
+boxplot(type_sprayed_list, 
+        col = graphic_colors, 
+        cex.axis = 0.7,
+        main = "Zależność czasu od typu żarówek i użycia CoatItYourself")
+```
+Wykres wskazuje na znaczące różnice między zwykłymi żarówkami a *DoubleBulb*. Czyli, patrząc na ten wykres, można dojść do wniosku że żarówki *DoubleBulb* działają dłużej niż żarówki zwykłe.
+
+Jeżeli chodzi o wykorzystanie sprayu to różnice między żarówkami pokrytymi sprayem a tymi bez sprayu nie są jednoznaczne. Widać, że w przypadku zwykłych żarówek wygląda na to, że spray przedłuża czas życia. W przypadku żarówek *DoubleBulb* z wykresu widzimy, że czas życia żarówek bez sprayu i ze sprayem jest raczej taki sam.
+
+Wszystkie te założenia zostały zweryfikowane statystycznie.
+
+# Filtrowanie danych
+
+Aby ułatwić wykonanie i interpretację testów statystycznych, dane podzieliłyśmy na podzbiory według typu żarówki i użycia sprayu:
+```{r}
+regular_bulb <- subset(data, data[["product_type"]] == "regular bulb")
+regular_bulb_not_sprayed <- subset(regular_bulb, regular_bulb[["sprayed"]] == "none")
+regular_bulb_sprayed <- subset(regular_bulb, regular_bulb[["sprayed"]] == "CoatItYourself")
+
+double_bulb <- subset(data, data[["product_type"]] == "DoubleBulb")
+double_bulb_not_sprayed <- subset(double_bulb, double_bulb[["sprayed"]] == "none")
+double_bulb_sprayed <- subset(double_bulb, double_bulb[["sprayed"]] == "CoatItYourself")
+
+sprayed_bulbs <- subset(data, data[["sprayed"]] == "CoatItYourself")
+not_sprayed_bulbs <- subset(data, data[["sprayed"]] == "none")
+```
+
+# 1.Czy rzeczywiście żarówki o podwójnej bańce mają dłuższy średni czas życia niż żarówki o pojedynczej bańce?
+
+Na wykresie widziałyśmy, że istnieją różnice i że wydaje się, że żarówki o podwójnej bańce mają dłuższy czas życia niż żarówki o pojedyńczej bańce, ale dla wiarygodności danych przeprowadziłyśy też test statystyczny. 
+
+**Hipotezy badawcze**
+
+$H_0$: Żarówki o podwójnej bańce mają taki sam średni czas życia jak i żarówki o pojedyńczej bańce bez spraya.
+
+$H_1$: Żarówki o podwójnej bańce mają dłuższy średni czas życia niż żarówki o pojedynczej bańce bez spraya.
+
+Najpierw musiałyśmy wybrać który test statystyczny wykorzystać, więc sprawdziłyśmy założenie dla testu t-studenta czyli czy jest rozkład zbliżony do normalnego. Wykorzystałyśmy dla tego test Shapiro-Wilka. Przyjęłyśmy poziom istotności $\alpha = 0.05$, co oznacza, że hipoteza zerowa zostanie odrzucona, jeśli wartość p-value będzie mniejsza lub równa temu poziomowi.
+
+$H_0$: Czas życia żarówek jest rozkładem zbliżonym do normalnego.
+
+$H_1$: Czas życia żarówek nie jest rozkładem zbliżonym do normalnego.
+
+
+```{r}
+shapiro.test(regular_bulb$time_in_hours)
+shapiro.test(double_bulb$time_in_hours)
+```
+Jak widać w przypadku zwykłych żarówek nie możemy odrzucić hipotezy zerowej, czyli rozkład czasu życia tych żarówek jest zbliżony do rozkładu normalnego. Ale już w przypadku żarówek *DoubleBulb* p-value < 0.05, czyli odrzucamy hipotezę zerową, przyjmujemy alternatywną (Rozkład czasu życia żarówek *DoubleBulb* nie jest zbliżony do rozkładu normalnego).
+
+W takim przypadku nie możemy skorzystać się z testu t-Studenta.
+
+Do weryfikacji hipotez zdecydowałyśmy zastosować nieparametryczny test U Manna-Whitneya, który nie wymaga założenia normalności rozkładu i pozwala na porównanie dwóch niezależnych grup. Przyjęłyśmy poziom istotności $\alpha = 0.05$, co oznacza, że hipoteza zerowa zostanie odrzucona, jeśli wartość p-value będzie mniejsza lub równa temu poziomowi.
+
+```{r}
+alpha <- 0.05
+
+test <- wilcox.test(double_bulb$time_in_hours,regular_bulb$time_in_hours, alternative="greater")
+  
+print(paste("Uzyskano p-value:", test$p.value))
+  
+if (test$p.value <= alpha) {
+  print(paste("Odrzucamy hipotezę zerową, przyjmujemy hipotezę alternatywną: Żarówki o podwójnej bańce mają dłuższy średni czas życia niż żarówki o pojedynczej bańce."))
+} else {
+    print(paste("Nie można odrzucić hipotezy zerowej dla tego testu"))
+}
+```
+
+Wyniki wskazują, że średni czas życia żarówek o podwójnej bańce jest statystycznie dłuższy niż średni czas życia żarówek o pojedynczej bańce.
+
+# 2.Czy rzeczywiście spray przedłuża średni czas życia żarówki? Obu typów?
+
+Z wykresu wykorzystanego powyżej ("Zależność czasu od typu żarówek i użycia CoatItYourself") pamiętamy, że wyglądało na to, że spray nie przedłuża czasu życia żarówek *DoubleBulb*. Zdecydowałyśmy to sprawdzić statystycznie.
+
+### Żarówki *DoubleBulb*
+
+Najpierw musiałyśmy wybrać który test statystyczny wykorzystać, więc sprawdziłyśmy założenie dla testu t-studenta czyli czy jest rozkład zbliżony do normalnego. Wykorzystałyśmy dla tego test Shapiro-Wilka. Przyjęłyśmy poziom istotności $\alpha = 0.05$, co oznacza, że hipoteza zerowa zostanie odrzucona, jeśli wartość p-value będzie mniejsza lub równa temu poziomowi.
+
+$H_0$: Czas życia żarówek *DoubleBulb* bez sprayu i ze sprayem jest rozkładem zbliżonym do normalnego.
+
+$H_1$: Czas życia żarówek *DoubleBulb* bez sprayu i ze sprayem nie jest rozkładem zbliżonym do normalnego.
+
+```{r}
+shapiro.test(double_bulb_sprayed$time_in_hours)
+shapiro.test(double_bulb_not_sprayed$time_in_hours)
+```
+Jak widać w przypadku żarówek *DoubleBulb* ze sprayem nie możemy odrzucić hipotezy zerowej, czyli rozkład czasu życia tych żarówek jest zbliżony do rozkładu normalnego. Ale już w przypadku żarówek *DoubleBulb* bez sprayu p-value < 0.05, czyli odrzucamy hipotezę zerową, przyjmujemy alternatywną (Rozkład czasu życia żarówek *DoubleBulb* nie jest zbliżony do rozkładu normalnego).
+
+W takim przypadku zdecydowałyśmy, że test t-Studenta nie będzie najlepszą opcją.
+
+Do weryfikacji hipotez zdecydowałyśmy zastosować nieparametryczny test U Manna-Whitneya, który nie wymaga założenia normalności rozkładu i pozwala na porównanie dwóch niezależnych grup. Przyjęłyśmy poziom istotności $\alpha = 0.05$, co oznacza, że hipoteza zerowa zostanie odrzucona, jeśli wartość p-value będzie mniejsza lub równa temu poziomowi.
+
+**Hipotezy badawcze dla żarówki o podwójnej bańce:**
+
+$H_0$: Spray nie ma wpływu na średni czas życia żarówki o podwójnej bańce.
+
+$H_1$: Spray przedłuża średni czas życia żarówki o podwójnej bańce.
+
+```{r}
+alpha <- 0.05
+
+test <- wilcox.test(double_bulb_sprayed$time_in_hours,double_bulb_not_sprayed$time_in_hours, alternative="greater")
+  
+print(paste("Uzyskano p-value:", test$p.value))
+  
+if (test$p.value <= alpha) {
+  print(paste("Odrzucamy hipotezę zerową, przyjmujemy hipotezę alternatywną: Spray przedłuża średni czas życia żarówki o podwójnej bańce."))
+} else {
+    print(paste("Nie można odrzucić hipotezy zerowej dla tego testu"))
+}
+```
+
+Wyniki testu wskazują, że spray nie ma wpływu na średni czas życia żarówek o podwójnej bańce(dokładnie jak myślałyśmy patrząc na wykres).
+
+### Żarówki o pojedyńczej bańce
+
+Z wykresu widziałyśmy, że spray przedłuża czas życia żarówek o pojedyńczej bańce, ale dla wiarygodności sprawdziłyśmy to statystycznie.
+
+Najpierw musiałyśmy wybrać który test statystyczny wykorzystać, więc sprawdziłyśmy założenie dla testu t-studenta czyli czy jest rozkład zbliżony do normalnego. Wykorzystałyśmy dla tego test Shapiro-Wilka. Przyjęłyśmy poziom istotności $\alpha = 0.05$, co oznacza, że hipoteza zerowa zostanie odrzucona, jeśli wartość p-value będzie mniejsza lub równa temu poziomowi.
+
+$H_0$: Czas życia żarówek o pojedyńczej bańce bez sprayu i ze sprayem jest rozkładem zbliżonym do normalnego.
+
+$H_1$: Czas życia żarówek o pojedyńczej bańce bez sprayu i ze sprayem nie jest rozkładem zbliżonym do normalnego.
+
+```{r}
+shapiro.test(regular_bulb_not_sprayed$time_in_hours)
+shapiro.test(regular_bulb_sprayed$time_in_hours)
+```
+Jak widać w obu przypadkach(żarówki o pojedyńczej bańce ze sprayem oraz bez sprayu p-value > 0.05, czyli nie możemy odrzucić hipotezy zerowej. Możemy powiedzieć że rozkłady czasu życia żarówek o pojedyńczej bańce ze sprayem oraz bez sprayu są zbliżone do rozkładu normalnego.
+
+Zdecydowałyśmy wykorzystać test t-Studenta, ponieważ te rozkłady spełniają założenia tego testu i są to niezależne próby. Wykorzystamy ten test dla sprawdzenie czy ma spray wpływ na średni czas życia żarówki o pojedyńczej bańce. Przyjęłyśmy poziom istotności $\alpha = 0.05$, co oznacza, że hipoteza zerowa zostanie odrzucona, jeśli wartość p-value będzie mniejsza lub równa temu poziomowi.
+
+**Hipotezy badawcze dla żarówki o pojedyńczej bańce:**
+
+$H_0$: Spray nie ma wpływu na średni czas życia żarówki o pojedyńczej bańce.
+
+$H_1$: Spray przedłuża średni czas życia żarówki o pojedyńczej bańce.
+
+```{r}
+alpha <- 0.05
+
+test <- t.test(regular_bulb_sprayed$time_in_hours,regular_bulb_not_sprayed$time_in_hours, alternative="greater")
+  
+print(paste("Uzyskano p-value:", test$p.value))
+  
+if (test$p.value <= alpha) {
+  print(paste("Odrzucamy hipotezę zerową, przyjmujemy hipotezę alternatywną: Spray przedłuża średni czas życia żarówki o pojedyńczej bańce."))
+} else {
+    print(paste("Nie można odrzucić hipotezy zerowej dla tego testu"))
+}
+```
+
+Wyniki wskazują, że różnica między średnim czasem życia żarówek o pojedynczej bańce bez spraya i ze sprayem jest statystycznie istotna. Spray przedłuża średni czas życia żarówek o pojedynczej bańce.
+
+# 3.Czy używanie którejś z tych alternatyw do zwykłych żarówek o pojedynczej bańce ma sens ekonomiczny?
+
+Aby ocenić sens ekonomiczny stosowania alternatyw, obliczyłyśmy całkowity koszt użytkowania oraz koszt godzinny dla każdej z czterech badanych kombinacji. 
+
+```{r}
+sprayed_bulbs <- subset(data, data[["sprayed"]] == "CoatItYourself")
+sum_of_sprayed_time <- sum(sprayed_bulbs[["time_in_hours"]])
+price_of_CoatItYourself_per_use <- CoatItYourself_price / sum_of_sprayed_time
+```
+
+Obliczyłyśmy koszt całkowity każdej żarówki (z użyciem spraya i bez) oraz koszt godzinny tychże żarówek.
+```{r}
+old_colnames <- colnames(data)
+data[, ncol(data) + 1] <- 0 
+colnames(data) <- c(old_colnames, "total_price")
+i <- 0
+for (time in data[["time_in_hours"]]) {
+  i <- i + 1
+  if (data[i, "sprayed"] == "CoatItYourself"){
+    data[i, "total_price"] <- time * price_of_CoatItYourself_per_use + data[i, "price_in_PLN"]
+  } else {
+    data[i, "total_price"] <-  data[i, "price_in_PLN"]
+  }
+}
+
+old_colnames <- colnames(data)
+data[, ncol(data) + 1] <- data[, "total_price"] / data[, "time_in_hours"]
+colnames(data) <- c(old_colnames, "total_price_per_hour")
+```
+
+Ponownie odfiltrowałyśmy dane, żeby podzbiory zawierały nowopowstałe kolumny:
+```{r}
+regular_bulb <- subset(data, data[["product_type"]] == "regular bulb")
+regular_bulb_not_sprayed <- subset(regular_bulb, regular_bulb[["sprayed"]] == "none")
+regular_bulb_sprayed <- subset(regular_bulb, regular_bulb[["sprayed"]] == "CoatItYourself")
+
+double_bulb <- subset(data, data[["product_type"]] == "DoubleBulb")
+double_bulb_not_sprayed <- subset(double_bulb, double_bulb[["sprayed"]] == "none")
+double_bulb_sprayed <- subset(double_bulb, double_bulb[["sprayed"]] == "CoatItYourself")
+
+sprayed_bulbs <- subset(data, data[["sprayed"]] == "CoatItYourself")
+not_sprayed_bulbs <- subset(data, data[["sprayed"]] == "none")
+```
+
+Zbudowałyśmy wykres pokazujący różnice średnich cen godziny użytkowania poszczególnych żarówek:
+```{r}
+mean_price_per_hour_regular_sprayed <- mean(regular_bulb_sprayed[["total_price_per_hour"]])
+mean_price_per_hour_regular_not_sprayed <- mean(regular_bulb_not_sprayed[["total_price_per_hour"]])
+mean_price_per_hour_double_sprayed <- mean(double_bulb_sprayed[["total_price_per_hour"]])
+mean_price_per_hour_double_not_sprayed <- mean(double_bulb_not_sprayed[["total_price_per_hour"]])
+
+values <- c(mean_price_per_hour_regular_not_sprayed, 
+            mean_price_per_hour_regular_sprayed, 
+            mean_price_per_hour_double_not_sprayed,
+            mean_price_per_hour_double_sprayed)
+
+labels <- c("Regular Not Sprayed", 
+            "Regular Sprayed", 
+            "Double Not Sprayed", 
+            "Double Sprayed")
+
+bar_positions <- barplot(
+  values, 
+  names.arg = labels,    
+  cex.names = 0.8,
+  col = graphic_colors,         
+  border = "black",       
+  main = "Średnia cena za godzinę użytkowania", 
+  xlab = "Typ żarówki",   
+  ylab = "Średnia cena za godzinę"
+)
+segments(
+  x0 = 0,               
+  y0 = values,          
+  x1 = bar_positions,   
+  y1 = values,        
+  col = graphic_colors,           
+  lty = 2                # Styl linii (2 = przerywana)
+)
+```
+
+Na podstawie analizy kosztów oraz wykresów można zauważyć, że:
+
+Najbardziej opłacalna jest zwykła żarówka ze sprayem, choć różnica w stosunku do zwykłej żarówki bez spraya jest niewielka.
+Żarówki o podwójnej bańce są droższe w użytkowaniu, a stosowanie spraya dodatkowo zwiększa ich koszt.
+
+# Test statystyczny dla sprawdzenia sensu ekonomicznego
+
+Aby dojść do wniosków i sformułować nasze rekomendacje, przeprowadziłyśmy testy statystyczne.
+
+### Żarówki o podwójnej bańce
+
+Chciałybyśmy sprawdzić, czy średnia cena za godzinę użytkowania żarówki o podwójnej bańce (DoubleBulb) jest statystycznie istotnie wyższa niż średnia cena za godzinę użytkowania zwykłej żarówki (Regular Bulb). W tym celu zastosowałyśmy nieparametryczny test U Manna-Whitneya, ponieważ jeszcze wcześniej sprawdziłyśmy założenie normalności rozkładu i okazało się, że rozkład czasu życia żarówek *DoubleBulb* nie jest zbliżony do normalnego - nie spełnia założenia dla wykorzystania testu t-Studenta. Przyjęłyśmy poziom istotności $\alpha = 0.05$, co oznacza, że na tym poziomie będziemy gotowe odrzucić hipotezę zerową.
+
+$H_0$: Średnia cena za godzinę żarówki o podwójnej bańce jest taka sama jak średnia cena za godzinę żarówki o pojedyńczej bańce.
+
+$H_1$: Średnia cena za godzinę żarówki o podwójnej bańce jest większa niż średnia cena za godzinę żarówki o pojedyńczej bańce.
+
+```{r}
+alpha <- 0.05
+
+test <- wilcox.test(double_bulb$total_price_per_hour,regular_bulb$total_price_per_hour, alternative="greater")
+  
+print(paste("Uzyskano p-value:", test$p.value))
+  
+if (test$p.value <= alpha) {
+  print(paste("Odrzucamy hipotezę zerową, przyjmujemy hipotezę alternatywną: Cena za godzinę żarówki o podwójnwj bańce jest większa niż średnia cena za godzinę żarówki o pojedyńczej bańce."))
+} else {
+    print(paste("Nie można odrzucić hipotezy zerowej dla tego testu"))
+}
+```
+
+Z wyników testu wynika, że użytkowanie żarówki o podwójnej bańce jest droższe niż użytkowanie żarówki o pojedynczej bańce. Chociaż żarówki o podwójnej bańce charakteryzują się dłuższym czasem życia, ich stosowanie *nie jest uzasadnione ekonomicznie*.
+
+Z wcześniejszych testów statystycznych wynika również, że stosowanie sprayu w przypadku żarówek o podwójnej bańce nie zwiększa ich średniego czasu życia, co oznacza, że spray w tym przypadku również nie ma sensu ekonomicznego.
+
+### Żarówki o pojedyńczej bańce 
+
+Odwrotnie wygląda sytuacja w przypadku żarówek o pojedynczej bańce – stosowanie sprayu wydłuża ich średni czas życia. Aby sprawdzić, czy taka alternatywa (żarówka o pojedynczej bańce ze sprayem) jest ekonomicznie opłacalna, przeprowadziłyśmy test t-Studenta, ponieważ jeszcze wcześniej sprawdziłyśmy założenie normalności rozkładu i okazało się, że rozkład czasu życia żarówek o pojedyńczej bańce jest zbliżony do normalnego - spełnia założenia dla wykorzystania testu t-Studenta. Przyjęłyśmy poziom istotności $\alpha = 0.05$.
+
+$H_0$: Średnia cena za godzinę żarówki o pojedyńczej bańce bez spraya jest taka sama jak średnia cena za godzinę żarówki o pojedyńczej bańce ze sprayiem.
+
+$H_1$: Średnia cena za godzinę żarówki o pojedyńczej bańce ze sprayiem jest większa niż średnia cena za godzinę żarówki o pojedyńczej bańce bez spraya.
+
+```{r}
+alpha <- 0.05
+
+test <- t.test(regular_bulb_sprayed$total_price_per_hour,regular_bulb_not_sprayed$total_price_per_hour, alternative="greater")
+  
+print(paste("Uzyskano p-value:", test$p.value))
+  
+if (test$p.value <= alpha) {
+  print(paste("Odrzucamy hipotezę zerową, przyjmujemy hipotezę alternatywną: Średnia cena za godzinę żarówki o pojedyńczej bańce ze sprayiem jest większa niż średnia cena za godzinę żarówki o pojedyńczej bańce bez spraya."))
+} else {
+    print(paste("Nie można odrzucić hipotezy zerowej dla tego testu"))
+}
+```
+
+Na podstawie wyników testu można stwierdzić, że średnia cena za godzinę użytkowania żarówki o pojedynczej bańce bez sprayu jest taka sama jak średnia cena za godzinę użytkowania żarówki o pojedynczej bańce ze sprayem. Z wcześniejszych wyników wiemy, że żarówki o pojedynczej bańce ze sprayem charakteryzują się dłuższym czasem życia. Wydaje się więc, że stosowanie sprayu może mieć sens ekonomiczny w przypadku żarówek o pojedynczej bańce.
+
+Jednakże zakup sprayu *CoatItYourself* i jego stosowanie w przypadku zwykłych żarówek nieznacznie obniża średni koszt użytkowania, ale z praktycznego punktu widzenia jest to rozwiązanie nieopłacalne. Wynika to z konieczności reaplikacji co godzinę oraz potrzeby odczekania, aż żarówka ostygnie.
+
+Podsumowując, używanie którejś z tych alternatyw do zwykłych żarówek o pojedynczej bańce nie ma sensu ekonomicznego, co wychodzi z wyników testów statystycznych oraz praktycznego punktu widzenia.
+
+# 4.Rekomendowane zmiany dla wzrostu użyteczności oraz ekonomicznego sensu stosowania spraya.
+W związku z wynikami testów statystycznych oraz analizą wykresów rekomendujemy skierowanie dalszych prac nad *CoatItYourself* na wydłużenie czasu pomiędzy reaplikacjami sprayu. Taki krok zmniejszyłby godzinny koszt użytkowania oraz zwiększyłby wygodę użytkowania.
+
+Jednocześnie sugerujemy rozważenie obniżenia ceny sprayu, ponieważ różnica cenowa w stosunku do użytkowania zwykłych żarówek bez sprayu z praktycznego punktu widzenia jest znikoma.
+
+Jeśli chodzi o żarówki *DoubleBulb*, ich stosowanie nie jest ekonomicznie opłacalne, a użycie sprayu *CoatItYourself* dodatkowo zwiększa koszt użytkowania. Należy jednak zauważyć, że żarówki *DoubleBulb* wyróżniają się większą trwałością, co pozwala na rzadszą wymianę. W niektórych sytuacjach, takich jak trudno dostępne miejsca montażu, może to być istotnym priorytetem dla konsumenta.
+
+
+# Zakładając dzienne użycie żarówki 4 godziny/dobę, na ile lat średnio starcza jedna żarówka
+
+Przyjrzyjmy się teraz sytuacji przeciętnego gospodarstwa domowego.
+
+Założenia:  
+- Dzienny czas użytkowania: 4 godziny.  
+- Liczba żarówek w gospodarstwie: 40.  
+
+Średni czas użytkowania poszczególnych żarówek w dniach:
+
+```{r}
+mean_use_time_per_day_in_household <- 4
+mean_number_of_bulbs_in_household <- 40
+mean_time_regular_not_sprayed <- mean(regular_bulb_not_sprayed[["time_in_hours"]])
+mean_time_double_not_sprayed <- mean(double_bulb_not_sprayed[["time_in_hours"]])
+mean_time_regular_sprayed <- mean(regular_bulb_sprayed[["time_in_hours"]])
+mean_time_double_sprayed <- mean(double_bulb_sprayed[["time_in_hours"]])
+
+mean_time_in_days_regular_not_sprayed <- mean_time_regular_not_sprayed / mean_use_time_per_day_in_household
+mean_time_in_days_regular_sprayed <- mean_time_regular_sprayed / mean_use_time_per_day_in_household
+mean_time_in_days_double_not_sprayed <- mean_time_double_not_sprayed / mean_use_time_per_day_in_household 
+mean_time_in_days_double_sprayed <- mean_time_double_sprayed / mean_use_time_per_day_in_household
+
+mean_time_in_days <- c(mean_time_in_days_regular_not_sprayed, 
+                       mean_time_in_days_regular_sprayed, 
+                       mean_time_in_days_double_not_sprayed, 
+                       mean_time_in_days_double_sprayed)
+
+bar_positions <- barplot(
+  mean_time_in_days,
+  names.arg = labels,     
+  col = graphic_colors,     
+  cex.names = 0.8,
+  border = "black",       
+  main = "Średni czas użytkowania poszczególnych żarówek",
+  xlab = "Typ żarówki",   
+  ylab = "Średni czas użytkowania w dniach"
+)
+segments(
+  x0 = 0,                
+  y0 = mean_time_in_days,
+  x1 = bar_positions,    
+  y1 = mean_time_in_days,
+  col = graphic_colors, 
+  lty = 2                # Styl linii (2 = przerywana)
+)
+
+mean_time_in_days_regular_not_sprayed 
+mean_time_in_days_regular_sprayed 
+mean_time_in_days_double_not_sprayed 
+mean_time_in_days_double_sprayed
+
+```
+Z wykresu widzimy, że średni czas użytkowania w dniach jest większy dla żarówek o podwójnej bańce.
+Spray również pzredłuża czas użytkowania zarówno żarówek o pojedyńczej bańce jak i żarówek o podójnej bańce.
+
+Wtedy jedne opakowanie w tym modelowym gospodarstwie domowym starczy na:
+
+```{r}
+CoatItYourself_time_to_use_up_in_years <- sum_of_sprayed_time / mean_use_time_per_day_in_household / mean_number_of_bulbs_in_household / 365 
+CoatItYourself_time_to_use_up_in_years
+```
+
+
+# Wnioski i rekomendacje
+
+Na podstawie przeprowadzonej analizy statystycznej i ekonomicznej można wyciągnąć następujące wnioski:
+
+1. **Czas życia żarówek:**
+   - Żarówki *DoubleBulb* mają statystycznie dłuższy średni czas życia niż żarówki standardowe (*regular bulb*).
+   - Spray *CoatItYourself* wydłuża średni czas życia żarówek standardowych, ale nie ma wpływu na czas życia żarówek *DoubleBulb*.
+
+2. **Koszt użytkowania:**
+   - Najbardziej opłacalną opcją jest stosowanie żarówek standardowych pokrytych sprayem *CoatItYourself*. Różnica w kosztach użytkowania między tą opcją a żarówkami standardowymi bez spraya jest jednak niewielka.
+   - Żarówki *DoubleBulb* są droższe w użytkowaniu, zarówno w wersji ze sprayem, jak i bez niego. Mimo ich dłuższego czasu życia, nie są one ekonomicznie uzasadnione.
+
+3. **Rekomendacje dla producenta:**
+   - Warto skupić się na promocji sprayu *CoatItYourself* w połączeniu z żarówkami standardowymi, gdyż ta kombinacja oferuje dobrą równowagę między trwałością a kosztem użytkowania.
+   - Można rozważyć obniżenie kosztów produkcji żarówek *DoubleBulb* lub wprowadzenie dodatkowych innowacji, które zwiększyłyby ich ekonomiczną opłacalność.
+   - Należy przeanalizować możliwość ulepszenia składu sprayu *CoatItYourself*, aby jego efektywność była widoczna również w przypadku żarówek *DoubleBulb*.
+
+4. **Rekomendacje dla konsumentów:**
+   - Konsumenci, którzy chcą obniżyć koszty użytkowania żarówek, powinni wybierać żarówki standardowe w połączeniu ze sprayem *CoatItYourself*.
+   - Zakup żarówek *DoubleBulb* jest uzasadniony jedynie w sytuacjach, gdzie szczególnie istotna jest ich większa trwałość, a koszt użytkowania ma mniejsze znaczenie.
+
+
