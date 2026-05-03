@@ -166,7 +166,7 @@ A statistical study evaluating the effectiveness of two innovations by lightbulb
 |---|---------|-----|-----------|-------|
 | 01 | [Wykrywanie phishingu](#-01-wykrywanie-stron-phishingowych) | Klasyfikacja (ML) | Python, scikit-learn | 🐍 Python |
 | 02 | [Analiza sentymentu — Olivia Rodrigo](#-02-analiza-sentymentu--nlp-na-poziomie-encji) | NLP / Analiza sentymentu | Python, BERT, NLTK | 🐍 Python |
-| 03 | [Analiza żywotności żarówek LaLuz](#-03-analiza-żywotności-żarówek-laluz) | Analiza statystyczna / EDA | R, RMarkdown | 📊 R |
+| 03 | [Analiza skuteczności rozwiązań dla żarówek LaLuz](#-03-analiza-żywotności-żarówek-laluz) | Analiza statystyczna / EDA | R, RMarkdown | 📊 R |
 
 ---
 
@@ -239,7 +239,7 @@ Pipeline do analizy sentymentu na poziomie encji — wyodrębnia zdania zawieraj
 
 ---
 
-## 💡 03. Analiza Żywotności Żarówek LaLuz
+## 💡 03. Analiza Skuteczności Rozwiązań dla Żarówek LaLuz
 
 **Typ:** Analiza statystyczna · EDA · Testowanie hipotez  
 **Narzędzia:** R · RMarkdown · ggplot2 · Shapiro-Wilk · Mann-Whitney U · t-test
